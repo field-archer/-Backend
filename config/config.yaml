@@ -1,0 +1,26 @@
+# ForestFire 后端配置（勿提交含真实生产密码的版本到公开仓库时可改用本地副本）
+# 路径：与本目录下 config.py 同级
+
+api_v1_str: "/api"
+project_name: "ForestFire Backend"
+version: "1.0.0"
+
+upload_dir: "uploads"
+allowed_extensions:
+  - jpg
+  - jpeg
+  - png
+  - gif
+  - mp4
+  - avi
+  - mov
+
+# MySQL：mysql+pymysql://用户:密码@主机:端口/库名?charset=utf8mb4
+database_url: "mysql+pymysql://root:111222@127.0.0.1:3306/forestfire?charset=utf8mb4"
+
+jwt_secret: "ciallo~♪(´ε｀ )"
+jwt_algorithm: "HS256"
+jwt_expire_seconds: 7200
+
+# development | production（影响 DEBUG 等）
+environment: "development"

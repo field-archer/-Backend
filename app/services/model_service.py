@@ -1,6 +1,13 @@
 import os
+
 import cv2
 from ultralytics import YOLO
+
+
+def _output_path(src_path: str) -> str:
+    root, ext = os.path.splitext(src_path)
+    return f"{root}_output{ext}"
+
 
 class ModelService:
     def __init__(self):
@@ -44,8 +51,7 @@ class ModelService:
                         cv2.putText(img, f"fire: {confidence:.2f}", (x1, y1 - 10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
             
-            # 保存带有检测结果的图片
-            output_image_path = image_path.replace(".", "_output.")
+            output_image_path = _output_path(image_path)
             cv2.imwrite(output_image_path, img)
             
             # 确定风险等级
@@ -85,8 +91,7 @@ class ModelService:
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             
-            # 保存带有检测结果的视频
-            output_video_path = video_path.replace(".", "_output.")
+            output_video_path = _output_path(video_path)
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
             

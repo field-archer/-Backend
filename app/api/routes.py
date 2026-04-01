@@ -1,26 +1,30 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
-import os
 import base64
+import os
+import uuid
+
+from fastapi import APIRouter, File, UploadFile
+
 from config.config import config
 from app.services.model_service import model_service
 
 router = APIRouter()
 
+
 @router.post("/analyze")
 async def analyze_file(file: UploadFile = File(...)):
     """分析图片或视频文件"""
     try:
-        # 检查文件扩展名
-        file_ext = os.path.splitext(file.filename)[1].lower().lstrip('.')
+        raw_name = file.filename or ""
+        file_ext = os.path.splitext(raw_name)[1].lower().lstrip(".")
         if file_ext not in config.ALLOWED_EXTENSIONS:
             return {
                 "code": 40000,
                 "message": f"不支持的文件类型，支持的类型: {', '.join(config.ALLOWED_EXTENSIONS)}",
-                "data": None
+                "data": None,
             }
-        
-        # 保存文件
-        file_path = os.path.join(config.UPLOAD_DIR, file.filename)
+
+        stored_name = f"{uuid.uuid4().hex}.{file_ext}"
+        file_path = os.path.join(config.UPLOAD_DIR, stored_name)
         with open(file_path, "wb") as buffer:
             buffer.write(await file.read())
         
@@ -38,14 +42,9 @@ async def analyze_file(file: UploadFile = File(...)):
         # 计算平均置信度
         confidences = [detection.get("confidence", 0) for detection in result.get("detections", [])]
         average_confidence = sum(confidences) / len(confidences) if confidences else 0
-        
-        # 评估风险等级
-        risk_level = "low"
-        if fire_count > 5:
-            risk_level = "high"
-        elif fire_count > 3:
-            risk_level = "medium"
-        
+
+        risk_level = result.get("risk_level", "low")
+
         # 构建文件URL
         if output_path:
             file_name = os.path.basename(output_path)

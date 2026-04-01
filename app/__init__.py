@@ -1,0 +1,1 @@
+"""ForestFire backend application package."""

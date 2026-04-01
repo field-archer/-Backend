@@ -1,7 +1,13 @@
 fastapi
 uvicorn
+pyyaml
 python-multipart
 Pillow
 numpy
 ultralytics
 opencv-python
+sqlalchemy>=2.0
+pymysql>=1.1.0
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt>=4.0.0,<5
