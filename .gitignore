@@ -6,6 +6,9 @@
 dist/
 __pycache__/
 
+uploads/*
+!uploads/.gitkeep
+
 
 
 # Logs
