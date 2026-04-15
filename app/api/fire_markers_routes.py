@@ -10,6 +10,7 @@ from app.core.deps import get_current_user
 from app.core.errors import ApiError
 from app.database import get_db
 from app.models.fire_marker import FireMarker
+from app.models.fire_marker_event import FireMarkerEvent
 from app.models.user import User
 from app.schemas.fire_marker import (
     FireMarkerCreate,
@@ -17,6 +18,7 @@ from app.schemas.fire_marker import (
     FireMarkerOut,
     FireMarkerPageData,
     FireMarkerPatchBody,
+    FireMarkerStatusPatchBody,
 )
 
 router = APIRouter(prefix="/fire-markers", tags=["fire-markers"])
@@ -47,6 +49,11 @@ def create_marker(
         fire_count=body.fire_count,
         source=body.source,
         note=body.note,
+        status=body.status,
+        level=body.level,
+        cause=body.cause,
+        region=body.region,
+        reporter_username=user.username,
     )
     db.add(marker)
     db.commit()
@@ -60,7 +67,7 @@ def list_markers(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=200),
     from_: Optional[datetime] = Query(None, alias="from"),
     to: Optional[datetime] = Query(None),
 ) -> dict:
@@ -117,11 +124,72 @@ def patch_marker(
     marker = db.get(FireMarker, marker_id)
     if marker is None or marker.user_id != user.id:
         raise ApiError(40400, "资源不存在")
+
+    wrote_event = False
     if body.note is not None:
         marker.note = body.note
     if body.fire_count is not None:
         marker.fire_count = body.fire_count
-    db.commit()
+
+    if body.status is not None and body.status != marker.status:
+        marker.status = body.status
+        wrote_event = True
+    if body.level is not None and body.level != marker.level:
+        marker.level = body.level
+        wrote_event = True
+    if body.cause is not None and body.cause != marker.cause:
+        marker.cause = body.cause
+        wrote_event = True
+
+    if wrote_event:
+        marker.reporter_username = user.username
+        marker.reporter_user_id = user.id
+
+    db.flush()
     db.refresh(marker)
+
+    if wrote_event:
+        event = FireMarkerEvent(
+            marker_id=marker.id,
+            region=marker.region or "未知",
+            status=marker.status,
+            level=marker.level,
+            reporter_username=user.username,
+            event_time=marker.updated_at,
+        )
+        db.add(event)
+
+    db.commit()
+    data = FireMarkerOut.model_validate(marker)
+    return {"code": 20000, "message": "成功", "data": data.model_dump()}
+
+
+@router.patch("/{marker_id}/status")
+def patch_marker_status(
+    marker_id: int,
+    body: FireMarkerStatusPatchBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    marker = db.get(FireMarker, marker_id)
+    if marker is None or marker.user_id != user.id:
+        raise ApiError(40400, "资源不存在")
+    marker.status = body.status
+    marker.reporter_username = user.username
+    marker.reporter_user_id = user.id
+    db.flush()
+    db.refresh(marker)
+
+    event = FireMarkerEvent(
+        marker_id=marker.id,
+        region=marker.region or "未知",
+        status=marker.status,
+        level=marker.level,
+        reporter_username=user.username,
+        event_time=marker.updated_at,
+    )
+    db.add(event)
+    db.commit()
+
     data = FireMarkerOut.model_validate(marker)
     return {"code": 20000, "message": "成功", "data": data.model_dump()}

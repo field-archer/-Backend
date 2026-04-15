@@ -11,8 +11,21 @@ def _output_path(src_path: str) -> str:
 
 class ModelService:
     def __init__(self):
-        # 加载YOLO模型
-        self.model = YOLO("yolo10n_fire.pt")
+        self._model: YOLO | None = None
+
+    def _get_model(self) -> YOLO:
+        if self._model is not None:
+            return self._model
+
+        model_path = os.getenv("MODEL_PATH") or "yolo10n_fire.pt"
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(
+                f"缺少模型文件: {model_path}。请将权重文件放到后端工作目录，"
+                f"或在环境变量 MODEL_PATH 中指定其路径。"
+            )
+
+        self._model = YOLO(model_path)
+        return self._model
     
     def analyze_image(self, image_path: str) -> dict:
         """分析图片"""
@@ -22,7 +35,7 @@ class ModelService:
             height, width, channels = img.shape
             
             # 使用模型进行检测
-            results = self.model(image_path)
+            results = self._get_model()(image_path)
             
             # 处理检测结果
             detections = []
@@ -106,7 +119,7 @@ class ModelService:
                     break
                 
                 # 使用模型检测
-                results = self.model(frame)
+                results = self._get_model()(frame)
                 
                 # 处理检测结果
                 for result in results:

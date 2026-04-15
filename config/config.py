@@ -3,6 +3,8 @@ from typing import Any
 
 import yaml
 
+import os
+
 _CONFIG_DIR = Path(__file__).resolve().parent
 _CONFIG_FILE = _CONFIG_DIR / "config.yaml"
 
@@ -26,7 +28,7 @@ class Config:
     API_V1_STR: str = str(_DATA.get("api_v1_str", "/api"))
     PROJECT_NAME: str = str(_DATA.get("project_name", "ForestFire Backend"))
     VERSION: str = str(_DATA.get("version", "1.0.0"))
-    UPLOAD_DIR: str = str(_DATA.get("upload_dir", "uploads"))
+    UPLOAD_DIR: str = str(os.getenv("UPLOAD_DIR") or _DATA.get("upload_dir", "uploads"))
     raw_exts = _DATA.get("allowed_extensions")
     if not isinstance(raw_exts, list) or not raw_exts:
         ALLOWED_EXTENSIONS: set[str] = {
@@ -41,10 +43,10 @@ class Config:
     else:
         ALLOWED_EXTENSIONS = {str(x).lower().lstrip(".") for x in raw_exts}
 
-    DATABASE_URL: str = str(_DATA["database_url"])
-    JWT_SECRET: str = str(_DATA["jwt_secret"])
+    DATABASE_URL: str = str(os.getenv("DATABASE_URL") or _DATA["database_url"])
+    JWT_SECRET: str = str(os.getenv("JWT_SECRET") or _DATA["jwt_secret"])
     JWT_ALGORITHM: str = str(_DATA.get("jwt_algorithm", "HS256"))
-    JWT_EXPIRE_SECONDS: int = int(_DATA.get("jwt_expire_seconds", 7200))
+    JWT_EXPIRE_SECONDS: int = int(os.getenv("JWT_EXPIRE_SECONDS") or _DATA.get("jwt_expire_seconds", 7200))
 
 
 class DevelopmentConfig(Config):

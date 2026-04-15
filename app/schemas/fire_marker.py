@@ -12,6 +12,10 @@ class FireMarkerCreate(BaseModel):
     fire_count: int = Field(..., ge=1)
     source: Optional[str] = Field(None, max_length=32)
     note: Optional[str] = None
+    status: str = Field("pending", pattern="^(pending|handling|extinguished)$")
+    level: str = Field("low", pattern="^(low|medium|high)$")
+    cause: str = Field("unknown", pattern="^(human|lightning|farming|unknown)$")
+    region: Optional[str] = Field(None, max_length=64)
 
     @field_validator("longitude")
     @classmethod
@@ -40,6 +44,13 @@ class FireMarkerOut(BaseModel):
     source: Optional[str]
     note: Optional[str]
     created_at: datetime
+    updated_at: datetime
+    status: str
+    level: str
+    cause: str
+    region: Optional[str]
+    reporter_user_id: Optional[str]
+    reporter_username: Optional[str]
 
     @field_validator("longitude", "latitude", mode="before")
     @classmethod
@@ -60,6 +71,11 @@ class FireMarkerListItem(BaseModel):
     source: Optional[str]
     note: Optional[str]
     created_at: datetime
+    updated_at: datetime
+    status: str
+    level: str
+    cause: str
+    region: Optional[str]
 
     @field_validator("longitude", "latitude", mode="before")
     @classmethod
@@ -79,3 +95,12 @@ class FireMarkerPageData(BaseModel):
 class FireMarkerPatchBody(BaseModel):
     note: Optional[str] = None
     fire_count: Optional[int] = Field(None, ge=1)
+    status: Optional[str] = Field(
+        None, pattern="^(pending|handling|extinguished)$"
+    )
+    level: Optional[str] = Field(None, pattern="^(low|medium|high)$")
+    cause: Optional[str] = Field(None, pattern="^(human|lightning|farming|unknown)$")
+
+
+class FireMarkerStatusPatchBody(BaseModel):
+    status: str = Field(..., pattern="^(pending|handling|extinguished)$")

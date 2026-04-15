@@ -1,0 +1,152 @@
+林火检测系统（前端）前端须知（后端接口对接）
+更新时间：2026-04-13
+
+本文件用于前端同学快速对接后端接口与字段约定。
+统一响应 Envelope：
+{
+  "code": 20000,
+  "message": "成功",
+  "data": ...
+}
+
+========================
+1. 鉴权
+========================
+- 除 /api/auth/register、/api/auth/login、/（根路径）、/api/analyze 外，其余接口需携带：
+  Authorization: Bearer <token>
+
+========================
+2. 火点 FireMarker（地图标记）
+========================
+
+2.1 字段枚举与显示映射
+- status：
+  - pending -> 未处置
+  - handling -> 处置中
+  - extinguished -> 已扑灭
+
+- level：
+  - low -> 低
+  - medium -> 中
+  - high -> 高
+
+- cause：
+  - human -> 人为用火
+  - lightning -> 雷击火
+  - farming -> 农事用火
+  - unknown -> 其他未知原因
+
+2.2 创建火点
+POST /api/fire-markers
+
+body（前端会发送的字段）：
+{
+  "longitude": 116.123,
+  "latitude": 40.123,
+  "marked_at": "2026-04-13T12:00:00Z",     // 可选，不传后端取当前时间（UTC）
+  "fire_count": 1,
+  "source": "map_click",
+  "note": null,
+
+  "status": "pending",                    // 可选，默认 pending
+  "level": "low",                         // 可选，默认 low
+  "cause": "unknown",                     // 可选，默认 unknown
+  "region": null                          // 可选
+}
+
+成功 data：后端返回更新后的完整 FireMarker（至少包含 id/status/updated_at 等）
+
+2.3 查询火点列表（当前用户）
+GET /api/fire-markers?page=&page_size=&from=&to=
+
+成功 data：
+{
+  "items": [ FireMarkerListItem... ],
+  "total": 100,
+  "page": 1,
+  "page_size": 20
+}
+
+2.4 删除火点
+DELETE /api/fire-markers/{id}
+
+2.5 更新火点状态（写台账）
+PATCH /api/fire-markers/{id}/status
+
+body：
+{
+  "status": "pending" | "handling" | "extinguished"
+}
+
+成功 data：更新后的 FireMarker（至少包含 id/status/updated_at）
+说明：后端会写入 fire_marker_events 一条记录用于“火情处置台账”。
+
+2.6 更新火点信息（写台账）
+PATCH /api/fire-markers/{id}
+
+body（按需传任意字段）：
+{
+  "status": "pending" | "handling" | "extinguished",
+  "level": "low" | "medium" | "high",
+  "cause": "human" | "lightning" | "farming" | "unknown",
+
+  "note": "可选",
+  "fire_count": 1
+}
+
+成功 data：更新后的 FireMarker（至少包含 id/status/level/cause/updated_at）
+说明：当 status/level/cause 任意发生变化，后端会写入 fire_marker_events 一条记录用于“火情处置台账”。
+
+========================
+3. 仪表盘统计
+========================
+GET /api/fire-dashboard
+
+成功 data（结构）：
+{
+  "overview": {
+    "today_reported": 12,
+    "pending": 3,
+    "handling": 5,
+    "extinguished": 4,
+    "level_counts": { "low": 6, "medium": 4, "high": 2 }
+  },
+  "cause_pie": [
+    { "name": "人为用火", "value": 5 }
+  ],
+  "disposal_pie": [
+    { "name": "已扑灭", "value": 4 },
+    { "name": "处置中", "value": 5 },
+    { "name": "待核查", "value": 3 },
+    { "name": "误报", "value": 0 }
+  ],
+  "region_bar": [
+    { "name": "密云", "value": 3 }
+  ],
+  "trend_30d": [
+    { "date": "03-15", "value": 0 }
+  ]
+}
+
+========================
+4. 火情处置台账（日志列表）
+========================
+GET /api/fire-ledger?page=&page_size=
+
+成功 data：
+{
+  "items": [
+    {
+      "id": 1,
+      "region": "密云",
+      "status": "pending",
+      "level": "low",
+      "updated_at": "2026-04-13T12:34:56Z",
+      "reporter_username": "zhangsan"
+    }
+  ],
+  "total": 100,
+  "page": 1,
+  "page_size": 20
+}
+
