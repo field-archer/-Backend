@@ -8,6 +8,7 @@ ultralytics
 opencv-python
 sqlalchemy>=2.0
 pymysql>=1.1.0
+httpx>=0.27,<1
 python-jose[cryptography]
 passlib[bcrypt]
 # passlib 1.7.x reads bcrypt version via `bcrypt.__about__`, which is removed in bcrypt 4.x.

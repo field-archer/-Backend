@@ -1,5 +1,5 @@
 林火检测系统（前端）后端须知
-更新时间：2026-04-13
+更新时间：2026-04-18
 
 本文件约定了本项目前端与后端（MySQL）交互所需的接口与数据结构。
 注意：接口沿用现有 JSON Envelope 结构：{ code, message, data }，成功 code=20000。
@@ -29,7 +29,7 @@ CREATE TABLE fire_markers (
   status ENUM('pending','handling','extinguished') NOT NULL DEFAULT 'pending',        -- 未处置/处置中/已扑灭
   level  ENUM('low','medium','high') NOT NULL DEFAULT 'low',                          -- 低/中/高
   cause  ENUM('human','lightning','farming','unknown') NOT NULL DEFAULT 'unknown',    -- 人为/雷击/农事/未知
-  region VARCHAR(64) NULL,                                                            -- 地区（北京周边：如 密云/怀柔/延庆/昌平/平谷/顺义/门头沟/房山/通州 等）
+  region VARCHAR(64) NULL,                                                            -- 区县级行政区划（如「北京市密云区」）；不按林场细分。由服务端在创建/坐标变更时用高德逆地理 REST（Web 服务 Key，仅存服务端）解析并写入；前端可传 null
 
   reporter_user_id BIGINT NULL,                                                       -- 标记人
   reporter_username VARCHAR(64) NULL,                                                  -- 冗余用户名（便于台账展示）
@@ -79,7 +79,7 @@ POST /api/fire-markers body（前端会发送的字段）
   "status": "pending",                 // 新增：默认 pending
   "level": "low",                      // 新增：默认 low（后端可按规则调整）
   "cause": "unknown",                  // 新增：默认 unknown
-  "region": null                       // 可由后端反查/解析后回填
+  "region": null                       // 可选；建议忽略前端值，由后端按经纬度逆地理写入区县级 region
 }
 
 3.2 火点状态更新（本次新增，点击地图标记后更改状态）
@@ -98,11 +98,41 @@ body（按需传任意字段）:
 {
   "status": "pending" | "handling" | "extinguished",
   "level": "low" | "medium" | "high",
-  "cause": "human" | "lightning" | "farming" | "unknown"
+  "cause": "human" | "lightning" | "farming" | "unknown",
+  "longitude": 116.123,
+  "latitude": 40.123
 }
+（经纬度须成对传入；服务端将逆地理刷新区县级 region。）
 
 返回 data：更新后的 FireMarkerItem（至少包含 id/status/level/cause/updated_at）
 并且后端需写入 fire_marker_events 一条日志记录（marker_id、region、status、level、reporter_username、event_time=updated_at）
+
+3.5 地理检索（地名搜索，需鉴权；由后端代理图商，浏览器不直连 POI 检索 HTTP）
+GET /api/geo/place-search?q=<关键词>
+
+GET /api/geo/reverse-geocode?longitude=&latitude=
+- 鉴权；代理高德逆地理；成功 data：{ "district": "区县级全称", "region": 同 district }；解析失败可为 null。
+
+GET /api/geo/map-config
+- 鉴权；返回浏览器 JS 地图初始化用 `jsapi_key`（Web 端/JS API Key）与 `security_js_code`（同 `amap_security_jscode`）。
+
+说明：
+- 配置项：`amap_web_service_key`（Web 服务，REST 必填）、`amap_jsapi_key`（Web 端 JS API，地图页面需要）、`amap_security_jscode`（REST 作 `jscode`、JSAPI 作 `securityJsCode`；可留空）。
+- 后端使用配置中的高德 Web 服务 Key（或等价服务）调用输入提示/关键字搜索等接口，将结果规范为数组返回。
+- 成功时 data 为 JSON 数组，元素字段与前端约定一致：
+  [
+    {
+      "id": "string",
+      "name": "地点名称",
+      "address": "省市区+详细地址拼接或后端给出的展示用地址",
+      "location": [116.397428, 39.90923]
+    }
+  ]
+- 无结果时 data 可为 []；参数 q 为空时建议返回 40000 或空数组（与现有错误码风格一致即可）。
+
+3.6 逆地理与 region（与火点创建/更新联动）
+- POST /api/fire-markers、PATCH /api/fire-markers/{id} 若携带或可推导经纬度，后端应调用高德逆地理（或等价）解析到「区县级」写入 fire_markers.region（及台账事件中的 region）；不按林场拆分。
+- 若解析失败，region 可为 NULL；台账事件 region 仍可用占位「未知」（见 fire_marker_events 说明）。
 
 3.3 仪表盘统计（本次新增，用于“火险态势总览”与“火情统计分析”四张图）
 GET /api/fire-dashboard
@@ -129,8 +159,8 @@ GET /api/fire-dashboard
     { "name": "误报", "value": 0 }
   ],
   "region_bar": [
-    { "name": "密云", "value": 3 },
-    { "name": "怀柔", "value": 2 }
+    { "name": "北京市密云区", "value": 3 },
+    { "name": "北京市怀柔区", "value": 2 }
   ],
   "trend_30d": [
     { "date": "03-15", "value": 0 },
@@ -148,7 +178,7 @@ GET /api/fire-dashboard
   - handling -> 处置中
   - extinguished -> 已扑灭
   - 误报：可由后端额外字段/规则判定（若暂不支持，可恒为 0）
-- region_bar：按 region 聚合（筛选北京周边区域）
+- region_bar：按 fire_markers.region 聚合（粒度为区县；不按林场）
 - trend_30d：近 30 天按天聚合
 
 3.4 火情处置台账（日志列表，本次新增）
@@ -159,7 +189,7 @@ GET /api/fire-ledger?page=&page_size=
   "items": [
     {
       "id": 1,
-      "region": "密云",
+      "region": "北京市密云区",
       "status": "pending",
       "level": "low",
       "updated_at": "2026-04-13T12:34:56Z",

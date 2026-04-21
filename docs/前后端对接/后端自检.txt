@@ -1,0 +1,31 @@
+林火检测系统 — 后端自检清单（地图 Key / 区县 / 台账）
+更新时间：2026-04-18
+
+========================
+A0. GET /api/geo/map-config（地图白屏、前端报 Key 未配置首查）
+========================
+
+[ ] 1. 需 Bearer；成功 data：{ "jsapi_key": "…", "security_js_code": "…" }（字符串非空）。
+[ ] 2. 未配置「Web端(JS API)」Key 时返回 code=50002，message 可读（勿 20000 + 空字段）。
+[ ] 3. curl：curl -s -H "Authorization: Bearer TOKEN" "http://localhost:8000/api/geo/map-config"
+
+========================
+A. GET /api/geo/reverse-geocode（未解析区县）
+========================
+
+[ ] 1. Query：longitude、latitude（GCJ-02）；成功 data 对象内至少一项非空：district、region、county、formatted_address、address 等（须展平，勿只嵌套 regeocode）。
+[ ] 2. code=50002 时 message 含可读原因（如高德 infocode）；前端会提示用户，不单显示「未解析区县」。
+[ ] 3. curl：curl -s -H "Authorization: Bearer TOKEN" "http://localhost:8000/api/geo/reverse-geocode?longitude=116.397428&latitude=39.90923"
+
+========================
+B. POST /api/fire-markers 与台账
+========================
+
+[ ] 1. 创建后 fire_markers.region 逆地理写入。
+[ ] 2. 同时写一条 fire_marker_events，GET /api/fire-ledger 可列出；item 含 marker_id、可选 longitude/latitude。
+
+========================
+C. GET /api/geo/place-search
+========================
+
+[ ] 1. data 为 POI 数组，元素含 id、name、address、location。

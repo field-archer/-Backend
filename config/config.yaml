@@ -24,3 +24,21 @@ jwt_expire_seconds: 7200
 
 # development | production（影响 DEBUG 等）
 environment: "development"
+
+# ---------- 高德：两类 Key（用途不同，勿混用）----------
+#
+# 1) Web 服务 Key：控制台平台类型选「Web服务」——仅用于后端请求
+#    https://restapi.amap.com/v3/...（逆地理、地名检索等）。不要用 JS API Key 填这里。
+# 2) Web 端（JS API）Key：控制台选「Web端(JS API)」——用于浏览器 AMapLoader 加载地图、底图与交互。
+#
+# 安全密钥（securityJsCode）：控制台「安全密钥」一串；后端调 REST 时作为 URL 参数 jscode；
+# 前端调 JSAPI 时作为 window._AMapSecurityConfig.securityJsCode（或通过鉴权接口 GET /api/geo/map-config 下发）。
+#
+amap_web_service_key: "4a3ad56353fb61a7201cf9b06e49b1e7"
+amap_jsapi_key: "2aa0029b6e80ed48f9eda9346d2237a8"
+amap_security_jscode: "71142e1be11bd26eeffd59b87eae5b86"
+# 可选：限制 POI 检索城市（如北京周边场景可填「北京」）
+amap_default_city: "北京"
+# 逆地理：进程内缓存 TTL（秒，默认 6h）；每分钟出站逆地理上限（0=不限流）
+# amap_regeo_cache_ttl_seconds: 21600
+# amap_regeo_max_per_minute: 90

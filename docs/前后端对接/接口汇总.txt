@@ -1,0 +1,74 @@
+林火检测系统 — 前后端 HTTP 接口汇总（与当前前端 src 调用一致）
+更新时间：2026-04-18
+维护：与后端对齐时随 `docs/前后端对接/后端须知.txt` 一并检查；路径均相对 API 根（见下）。
+
+========================
+一、Code Review — 前端职责边界（约定）
+========================
+
+前端优先负责：
+- 页面布局、样式、动效、交互状态（loading / 空态 / 错误提示）。
+- 地图展示层：高德 JSAPI 加载、缩放拖拽、覆盖物绘制（样式与点击逻辑）。
+- 把用户操作翻译成对后端的请求；把响应数据绑定到 UI。
+
+前端不负责（应交后端或已由后端承担）：
+- 业务数据持久化、聚合统计、台账与 region 的权威写入。
+- 高德 Web 服务（POI 检索、逆地理、行政区解析）：须由后端代理，前端只调本表中的 `/geo/*` 与自建业务接口。
+- 密钥：任何图商 Web Key 不得写进前端业务请求。
+
+待收敛（可选后续）：
+- `src/utils/regionEnrichment.ts` 在仪表盘 `region_bar` 不可靠时用「当前用户火点 + 逆地理」补图，属降级展示；根治应以后端 `GET /fire-dashboard` 的 `region_bar` 为准，前端可再简化为只展示接口数据。
+
+========================
+二、通用约定
+========================
+
+- API 根（默认）：http://localhost:8000/api  
+  可由环境变量 VITE_API_BASE_URL 覆盖（末尾勿重复 /api）。
+- 统一响应：{ "code", "message", "data" }，成功 code = 20000。
+- 鉴权：除注册、登录、根路径、POST /analyze 外，下列「需 Bearer」的接口须在 Header 带  
+  Authorization: Bearer <access_token>
+
+========================
+三、自建后端 JSON 接口一览（前端 apiFetch / fetch）
+========================
+
+（路径栏为相对 API 根的 path，完整 URL = API根 + path）
+
+| # | 方法 | 路径 | 需鉴权 | 说明 | 前端调用位置 |
+|---|------|------|--------|------|----------------|
+| 1 | POST | /auth/register | 否 | 注册 | src/api/auth.ts → registerUser |
+| 2 | POST | /auth/login | 否 | 登录 | src/api/auth.ts → loginUser |
+| 3 | GET | /auth/me | 是 | 当前用户 | src/api/auth.ts → fetchMe |
+| 4 | POST | /analyze | 否 | 火焰分析 multipart，字段名 file | src/views/MainView.vue（fetch） |
+| 5 | GET | /fire-markers | 是 | 火点分页，Query：page, page_size；data.items 中 status=extinguished 的项前端**不画地图标点**（仍可用于台账/统计） | src/api/fireMarkers.ts → listFireMarkers |
+| 6 | POST | /fire-markers | 是 | 创建火点，JSON body | src/api/fireMarkers.ts → createFireMarker |
+| 7 | DELETE | /fire-markers/{id} | 是 | 删除火点（须删库或约定软删）；HomeView 编辑弹窗「从数据库删除该火点」 | src/api/fireMarkers.ts → deleteFireMarker |
+| 8 | PATCH | /fire-markers/{id}/status | 是 | 仅更新状态，JSON { status } | src/api/fireMarkers.ts → updateFireMarkerStatus |
+| 9 | PATCH | /fire-markers/{id} | 是 | 部分更新 status/level/cause；可选 longitude+latitude 成对改坐标并由服务端刷 region | src/api/fireMarkers.ts → updateFireMarker |
+|10 | GET | /fire-dashboard | 是 | 仪表盘统计 JSON | src/api/fireDashboard.ts → getFireDashboard |
+|11 | GET | /fire-ledger | 是 | 台账分页，Query：page, page_size（前端合并「尚无事件」的火点补显，见 HomeView + regionEnrichment） | src/api/fireLedger.ts → listFireLedger |
+|12 | GET | /geo/place-search?q= | 是 | 地名搜索，data 为 POI 数组 | src/api/geo.ts → geoPlaceSearch |
+|13 | GET | /geo/reverse-geocode?longitude=&latitude= | 是 | 逆地理区县；data 展平含 district/region/…（须配置「Web服务」Key + 可选 jscode） | src/api/geo.ts → geoReverseDistrict |
+|14 | GET | /geo/map-config | 是 | 返回 jsapi_key、security_js_code 供高德 Loader（未登录可回退 .env VITE_AMAP_* 仅本地） | src/api/geo.ts → fetchGeoMapConfig；src/views/HomeView.vue → useMap |
+
+说明：
+- 表 4 `/analyze`：与 apiFetch 不同，MainView 使用 FormData + fetch；仍指向同一 API_BASE_URL。
+- fire-markers 列表 Query 在代码中仅显式传 page、page_size；若后端支持 from/to 可扩展，本表不强制。
+
+========================
+四、非「自建 JSON 表」但前端会发起的请求（展示层）
+========================
+
+| 类型 | 说明 |
+|------|------|
+| 高德 webapi.amap.com/loader.js + 地图瓦片 | 地图 SDK 与底图仍由浏览器加载；**JSAPI Key 建议经 GET /geo/map-config 下发**，勿写进前端仓库。业务检索、逆地理、region 权威数据由后端 REST 代理。 |
+| 内联 SVG data URI（火点图标） | 无网络请求。 |
+| echarts（npm 动态 import） | 随构建产物加载，无运行时 CDN。 |
+
+========================
+五、与「后端须知」分工
+========================
+
+- 本期/迭代任务、字段补充、验收口径：写 `后端须知.txt`（删旧建新）。
+- 全表路径与谁调了哪个接口：以本文件 `接口汇总.txt` 为准，便于后端对 OpenAPI 与实现逐项勾选。

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.database import get_db
+from app.models.fire_marker import FireMarker
 from app.models.fire_marker_event import FireMarkerEvent
 from app.models.user import User
 
@@ -22,24 +23,29 @@ def list_fire_ledger(
     page_size: int = Query(20, ge=1, le=200),
 ) -> dict[str, Any]:
     total = db.execute(select(func.count()).select_from(FireMarkerEvent)).scalar_one()
-    rows = db.scalars(
-        select(FireMarkerEvent)
+    rows = db.execute(
+        select(FireMarkerEvent, FireMarker)
+        .join(FireMarker, FireMarkerEvent.marker_id == FireMarker.id)
         .order_by(FireMarkerEvent.event_time.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
 
-    items = [
-        {
-            "id": r.id,
-            "region": r.region,
-            "status": r.status,
-            "level": r.level,
-            "updated_at": r.event_time,
-            "reporter_username": r.reporter_username,
-        }
-        for r in rows
-    ]
+    items = []
+    for ev, mk in rows:
+        items.append(
+            {
+                "id": ev.id,
+                "marker_id": ev.marker_id,
+                "region": ev.region,
+                "status": ev.status,
+                "level": ev.level,
+                "updated_at": ev.event_time,
+                "reporter_username": ev.reporter_username,
+                "longitude": float(mk.longitude),
+                "latitude": float(mk.latitude),
+            }
+        )
     return {
         "code": 20000,
         "message": "成功",

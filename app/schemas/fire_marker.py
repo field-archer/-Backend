@@ -95,11 +95,31 @@ class FireMarkerPageData(BaseModel):
 class FireMarkerPatchBody(BaseModel):
     note: Optional[str] = None
     fire_count: Optional[int] = Field(None, ge=1)
+    longitude: Optional[float] = None
+    latitude: Optional[float] = None
     status: Optional[str] = Field(
         None, pattern="^(pending|handling|extinguished)$"
     )
     level: Optional[str] = Field(None, pattern="^(low|medium|high)$")
     cause: Optional[str] = Field(None, pattern="^(human|lightning|farming|unknown)$")
+
+    @field_validator("longitude")
+    @classmethod
+    def check_lng_patch(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if v < -180.0 or v > 180.0:
+            raise ValueError("经度必须在 -180～180 之间")
+        return v
+
+    @field_validator("latitude")
+    @classmethod
+    def check_lat_patch(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
+        if v < -90.0 or v > 90.0:
+            raise ValueError("纬度必须在 -90～90 之间")
+        return v
 
 
 class FireMarkerStatusPatchBody(BaseModel):

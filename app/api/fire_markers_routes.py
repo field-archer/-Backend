@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
+from config.config import config
 from app.core.deps import get_current_user
 from app.core.errors import ApiError
 from app.database import get_db
@@ -20,6 +21,7 @@ from app.schemas.fire_marker import (
     FireMarkerPatchBody,
     FireMarkerStatusPatchBody,
 )
+from app.services.amap_client import reverse_geocode_district
 
 router = APIRouter(prefix="/fire-markers", tags=["fire-markers"])
 
@@ -28,6 +30,22 @@ def _ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _apply_district_region(marker: FireMarker) -> None:
+    """按经纬度逆地理写入区县级 region；未配置 Key 或失败则保持原值。"""
+    key = (config.AMAP_WEB_SERVICE_KEY or "").strip()
+    if not key:
+        return
+    jscode = (config.AMAP_SECURITY_JSCODE or "").strip()
+    region = reverse_geocode_district(
+        key,
+        float(marker.longitude),
+        float(marker.latitude),
+        jscode=jscode,
+    )
+    if region:
+        marker.region = region
 
 
 @router.post("")
@@ -52,10 +70,27 @@ def create_marker(
         status=body.status,
         level=body.level,
         cause=body.cause,
-        region=body.region,
+        region=None,
         reporter_username=user.username,
+        reporter_user_id=user.id,
     )
+    _apply_district_region(marker)
     db.add(marker)
+    db.flush()
+    db.refresh(marker)
+
+    # 自检 B.2：创建即写一条台账，便于 GET /api/fire-ledger 立刻出现
+    ledger_region = marker.region or "未知"
+    db.add(
+        FireMarkerEvent(
+            marker_id=marker.id,
+            region=ledger_region,
+            status=marker.status,
+            level=marker.level,
+            reporter_username=user.username,
+            event_time=marker.updated_at,
+        )
+    )
     db.commit()
     db.refresh(marker)
     data = FireMarkerOut.model_validate(marker)
@@ -126,6 +161,14 @@ def patch_marker(
         raise ApiError(40400, "资源不存在")
 
     wrote_event = False
+    coord_changed = False
+    if body.longitude is not None or body.latitude is not None:
+        if body.longitude is None or body.latitude is None:
+            raise ApiError(40000, "更新坐标时需同时传入 longitude 与 latitude")
+        marker.longitude = Decimal(str(body.longitude))
+        marker.latitude = Decimal(str(body.latitude))
+        coord_changed = True
+
     if body.note is not None:
         marker.note = body.note
     if body.fire_count is not None:
@@ -144,6 +187,9 @@ def patch_marker(
     if wrote_event:
         marker.reporter_username = user.username
         marker.reporter_user_id = user.id
+
+    if coord_changed or wrote_event:
+        _apply_district_region(marker)
 
     db.flush()
     db.refresh(marker)
@@ -177,6 +223,7 @@ def patch_marker_status(
     marker.status = body.status
     marker.reporter_username = user.username
     marker.reporter_user_id = user.id
+    _apply_district_region(marker)
     db.flush()
     db.refresh(marker)
 

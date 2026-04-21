@@ -13,6 +13,7 @@ from app.api.auth_routes import router as auth_router
 from app.api.fire_dashboard_routes import router as fire_dashboard_router
 from app.api.fire_ledger_routes import router as fire_ledger_router
 from app.api.fire_markers_routes import router as fire_markers_router
+from app.api.geo_routes import router as geo_router
 from app.api.routes import router as analyze_router
 from app.core.errors import ApiError
 from app.database import Base, engine
@@ -132,6 +133,7 @@ app.mount("/uploads", StaticFiles(directory=config.UPLOAD_DIR), name="uploads")
 app.include_router(analyze_router, prefix=config.API_V1_STR)
 app.include_router(auth_router, prefix=config.API_V1_STR)
 app.include_router(fire_markers_router, prefix=config.API_V1_STR)
+app.include_router(geo_router, prefix=config.API_V1_STR)
 app.include_router(fire_dashboard_router, prefix=config.API_V1_STR)
 app.include_router(fire_ledger_router, prefix=config.API_V1_STR)
 
