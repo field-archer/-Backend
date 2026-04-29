@@ -1,0 +1,80 @@
+无人机/车队（UGV）对接接口清单（后端 ↔ rosbridge）
+第2次更新
+
+说明：
+1) Web 前端只对接后端；无人机端/车队端通过 rosbridge 与后端间接联通。
+2) 坐标口径：经纬度按高德地图业务口径（GCJ-02）。
+3) 统一响应：后端 HTTP 返回 {code,message,data}；成功 code=20000。
+
+========================
+一、接口速览
+========================
+
+1. 后端 -> 无人机/车
+- UAV：publish `/uav/cmd/waypoint_mission`（GeoWaypointMission，含 waypoints[]）
+- UGV：publish `/ugv/cmd/waypoint_mission_geo`（GeoWaypointMission，复用结构）
+
+2. 无人机/车 -> 后端
+- UAV 状态：`/uav/state/*`（位置/高度/速度/姿态/电量/落地）
+- UAV 检测：`/uav/state/fire_detection`
+- UGV 状态：`/ugv/state/*`（位置/电量/基础状态/任务状态）
+
+========================
+二、接口详情
+========================
+
+1. 后端 -> 无人机/车
+
+1.1 UAV 航点任务
+- publish topic：`/uav/cmd/waypoint_mission`
+- type：`airsim_uav_interfaces/msg/GeoWaypointMission`
+- msg：
+  - `mission_id`: string
+  - `wait_for_completion`: bool
+  - `waypoints`: GeoWaypoint[]
+
+GeoWaypoint（每个航点）：
+- `latitude`: float64
+- `longitude`: float64
+- `altitude_m`: float64（米）
+- `velocity_mps`: float32（m/s）
+- `timeout_sec`: float32
+- `hold_time_sec`: float32
+- `use_yaw`: bool
+- `yaw_deg`: float32
+
+1.2 UGV（车队）经纬度航点任务
+- publish topic：`/ugv/cmd/waypoint_mission_geo`
+- type：`airsim_uav_interfaces/msg/GeoWaypointMission`（复用）
+- msg：同 UAV（`altitude_m` 可忽略/填 0）
+
+（补充：前端通过后端 HTTP `POST /api/uav/missions` 下发任务；可选 `speed_level` 由后端映射为 `velocity_mps` 默认值。）
+
+2. 无人机/车 -> 后端
+
+2.1 UAV 状态输出（后端订阅）
+- `/uav/state/global_position`（`sensor_msgs/NavSatFix`）→ 经纬度
+- `/uav/state/relative_altitude`（`std_msgs/Float32`）→ 高度
+- `/uav/state/local_twist_ned`（`geometry_msgs/TwistStamped`）→ 速度
+- `/uav/state/local_pose_ned`（`geometry_msgs/PoseStamped`）→ 姿态（roll/pitch 由后端换算）
+- `/uav/state/battery`（`sensor_msgs/BatteryState`）或 `/uav/state/basic_status`（`diagnostic_msgs/DiagnosticArray`）→ 电量
+- `/uav/state/landed`（`std_msgs/Bool`）→ landed 状态
+
+2.2 UAV 检测结果输出（后端订阅）
+- `/uav/state/fire_detection`（`airsim_uav_interfaces/FireDetectionResult`）
+- 关键字段：
+  - `okok`: bool
+  - `fire_probability`: float64
+  - `risk_level`: float64
+  - `flame_count`: int32
+  - `average_confidence`: float64
+  - `detected_target_count`: int32
+  - （可选扩展）`fire_cause`: human / lightning / farming / unknown
+
+2.3 UGV 状态输出（后端订阅）
+- `/ugv/state/global_position`（`sensor_msgs/NavSatFix`）→ 车队经纬度
+- `/ugv/state/battery`（`sensor_msgs/BatteryState`）→ 电量
+- `/ugv/state/basic_status`（`diagnostic_msgs/DiagnosticArray`）→ 速度/电量等（如 speed_mps, battery_percentage）
+- `/ugv/state/mission_status`（`diagnostic_msgs/DiagnosticArray`）→ 到达/任务状态（后端据此推 fleet.arrived）
+  - 建议键：mission_id / state(arrived) / arrived(true)
+

@@ -1,43 +1,33 @@
-【本文件夹用法】
-- 路径：docs/前后端对接/（与 docs/后端须知.txt 总规区分：总规长期保留；本文件只写「当期」要后端落地的项。）
-- 维护方式：每次对接新需求时，删除本文件后新建同名文件，只写本期任务；避免与历史任务混杂。
-- 详细字段与表结构仍以 docs/后端须知.txt、docs/前后端接口与设计.md 为准。
-
 ========================
-本期后端待办（与当前前端实现对齐）
-更新时间：2026-04-18
+本期后端待办（仅当期）
+第2次更新
+更新概述：无人机协同任务下发与WS回传
 ========================
 
-0) GET /api/geo/map-config（需 Bearer）
-   - 成功 data：{ "jsapi_key": "…", "security_js_code": "…" }，分别对应高德「Web端(JS API)」Key 与安全密钥 jscode。
-   - 未配置时 code=50002，message 需可读（便于前端提示运维改 config.yaml）。
+1) 任务下发（无人机/车队）
+- POST `/api/uav/missions`（需 Bearer）
+  - body：
+    - mission_type：uav / fleet
+    - waypoints：[{ longitude, latitude, altitude_m? }]
+      - uav：每个点必须包含 altitude_m（米）
+      - fleet：不需要 altitude_m
+    - speed_level（可选）：low / medium / high
+  - response data：{ mission_id: string }
 
-1) GET /api/geo/place-search?q=
-   - 鉴权；代理高德关键字/输入提示等；data 为数组：[{ id, name, address, location:[lng,lat] }]。
+2) WebSocket 回传（无人机协同）
+- WS：`/ws/uav?token=<access_token>`
+  - 结构：{ type, payload }
+  - uav.telemetry payload：
+    - longitude, latitude, battery, speed, altitude, roll, pitch, status(flying/hovering/landed)
+  - uav.detection payload：
+    - fire_probability, risk_level, flame_count, average_confidence, detected_target_count, longitude, latitude, fire_cause(human/lightning/farming/unknown)
+  - fleet.arrived payload：{ arrived: true }
 
-2) GET /api/geo/reverse-geocode?longitude=&latitude=
-   - 鉴权；代理高德逆地理；data：{ "district": "区县级全称" }（或增加同义字段 region，前端兼容）。
-   - 若高德返回 infocode=10021、文案含 CUQPS_HAS_EXCEEDED_THE_LIMIT：为**日配额/并发 QPS 超限**，与前端「已扑灭不画点」等逻辑无关；需在控制台提额/购买配额。服务端已实现**进程内 TTL 缓存**与**每分钟出站上限**（config：`amap_regeo_cache_ttl_seconds`、`amap_regeo_max_per_minute`，0 表示不限流），火点写库逆地理与本接口共用，降低短时间大量坐标连打高德。
+3) 返航
+- 仍复用 POST `/api/uav/missions`：
+  - 前端会生成“当前位置→Home”的 5 个航点下发（Home 为前端本地坐标，无需后端落库）
 
-3) 火点 region（区县级，不按林场）
-   - POST/PATCH 火点涉及经纬度时：服务端逆地理写入 fire_markers.region；勿依赖浏览器调图商 REST。
-
-4) 台账 fire-ledger
-   - 每条 item 建议返回 marker_id；可选 longitude、latitude（事件快照）。
-   - 写 fire_marker_events 时 region 尽量写真实区县（与主表一致），避免长期占位「未知」。
-
-5) 仪表盘 fire-dashboard
-   - region_bar 按 fire_markers.region 区县聚合；与前端 FireStatsCharts「各区县火情数量」一致。
-
-5b) 火点状态「已扑灭」与地图
-   - PATCH 将火点 status 更新为 extinguished（已扑灭）后，前端 GET /fire-markers 同步时会**不再**在地图上绘制该点；**主表记录仍保留**（供台账与统计）。列表响应里可仍返回该记录，也可由后端省略——前端均以 status 为准过滤。
-
-5c) 火点物理删除
-   - DELETE /api/fire-markers/{id}：须**真实删除**（或等价软删若产品约定）数据库主表及关联事件/外键；前端在「编辑火点」弹窗内提供「从数据库删除该火点」按钮调用此接口。
-
-6) 配置
-   - `amap_web_service_key`（Web 服务）与 `amap_jsapi_key`（Web 端 JS API）为两类 Key，均仅存 `config.yaml`。
-   - `amap_security_jscode`：REST 作 `jscode`；JSAPI 作 `securityJsCode`。
-   - `GET /api/geo/map-config`：鉴权后返回 `jsapi_key` + `security_js_code`，供前端初始化地图（避免 Key 写进前端仓库）。
-
-（后端已实现：1～2 路由、map-config、逆地理缓存/限流、3 火点逆地理与 PATCH 坐标、4 台账字段、5 仪表盘口径、6 配置项；火点列表由前端按 status 过滤地图标点，接口不筛 extinguished。）
+4) 车辆（车队）位置上报
+- POST `/api/fleet/telemetry`（需 Bearer）
+  - body：{ longitude, latitude }
+  - 说明：前端可按固定间隔（如 2s）上报车辆当前位置；车辆任务派发仍复用 POST `/api/uav/missions`（mission_type=fleet，仅一个目标点）。

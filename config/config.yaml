@@ -25,6 +25,12 @@ jwt_expire_seconds: 7200
 # development | production（影响 DEBUG 等）
 environment: "development"
 
+# ---------- ROS Bridge ----------
+# 后端作为 rosbridge 网关时连接的 WS 地址（建议 rosbridge 仅内网可达、无鉴权）
+rosbridge_url: "ws://127.0.0.1:9090"
+# ROS 相关日志文件（与其他日志分离）
+ros_log_file: "logs/ros.log"
+
 # ---------- 高德：两类 Key（用途不同，勿混用）----------
 #
 # 1) Web 服务 Key：控制台平台类型选「Web服务」——仅用于后端请求

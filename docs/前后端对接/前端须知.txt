@@ -1,34 +1,27 @@
-林火检测系统 — 前端对接须知（本期）
-更新时间：2026-04-18
-维护：仅在本目录 `docs/前后端对接/` 更新；细节以同目录 `接口汇总.txt`、`后端自检.txt` 为准。
+林火检测系统 — 前端对接须知（仅当期）
+第2次更新
+维护：仅在本目录 `docs/前后端对接/` 更新；已完成项请看 `接口汇总.txt`。
 
 ========================
-一、本期请你（前端）做的事
+一、本期请你（前端）做的事（仅当期）
 ========================
 
-1) 高德 JS 地图 Key 不要写死在仓库里
-   - 用户登录后请求：GET /api/geo/map-config（需 Bearer）
-   - 使用返回的 data：
-     - jsapi_key → 传给 AMapLoader.load({ key })
-     - security_js_code → 在 load 前设置 window._AMapSecurityConfig.securityJsCode
-   - 若 code=50002 且提示未配置 amap_jsapi_key：让运维在服务端 config.yaml 填写「Web端(JS API)」Key（与 Web 服务 Key 是两类，见运维说明）。
+1) 无人机协同：任务下发 + WS 回传 + 返航
+- POST `/api/uav/missions`（需 Bearer）
+  - mission_type：uav / fleet
+  - waypoints：[{ longitude, latitude, altitude_m? }]
+    - uav：每个点必须包含 altitude_m（米）
+    - fleet：不需要 altitude_m
+  - speed_level（可选）：low / medium / high
+- WS：`/ws/uav?token=<access_token>`（字段见 `接口汇总.txt`）
+- 返航：前端复用 `POST /api/uav/missions` 下发“当前位置→Home”的 5 个航点
 
-2) 区县展示 / 「未解析区县」
-   - 一律走：GET /api/geo/reverse-geocode?longitude=&latitude=（GCJ-02，与地图一致）
-   - 成功时 data 会展平多个字段（district、region、formatted_address 等），任取其一非空即可展示；不要只认某一个字段名。
-   - 若 code=50002：读 message（可能含高德 infocode，如 10009 表示 Key 类型错误；10021/CUQPS 为配额或 QPS 超限；亦可能为服务端限流文案），给用户可读提示，不要静默当「未解析」。
+2) 车辆（车队）位置上报（可选，若前端已有定位来源）
+- POST `/api/fleet/telemetry`（需 Bearer）
+  - body：{ longitude, latitude }
+  - 建议：固定间隔（如 2s）上报
 
-3) 地名搜索
-   - 继续走：GET /api/geo/place-search?q=（需 Bearer），不要浏览器直连高德 REST。
-
-4) 火点 PATCH（可选）
-   - PATCH /api/fire-markers/{id} 支持同时传 longitude、latitude（须成对），用于改点后由服务端逆地理刷新区县；若产品有「拖动标记更新坐标」应对接此字段。
-
-5) 台账列表
-   - GET /api/fire-ledger 每条 item 含 marker_id、longitude、latitude；可与列表去重/补显逻辑对齐（详见同目录后端自检 B/C）。
-
-6) 创建火点后台账
-   - 后端创建火点成功后会自动写一条 fire_marker_events，台账里应能较快看到新记录（仍可与本地临时行合并展示，按产品定）。
+（地图/逆地理/火点/台账等已完成对接项：统一以 `接口汇总.txt` 为准，本期不再重复写。）
 
 ========================
 二、不必再做的事（避免重复劳动）
@@ -45,11 +38,6 @@
 
 ========================
 四、实现状态（与代码同步）
-更新时间：2026-04-18
 ========================
-
-1) map-config：`src/api/geo.ts` → `fetchGeoMapConfig`；`src/views/HomeView.vue` → `useMap(..., { fetchMapCredentials })`；`src/composables/useMap.ts` 在 `AMapLoader.load` 前设置 `_AMapSecurityConfig.securityJsCode`。未登录时仅允许用 `.env` 的 `VITE_AMAP_KEY` / `VITE_AMAP_SECURITY_CODE` 本地调试（见仓库根 `.env.example`）。
-2) 逆地理 50002：`src/utils/geoApiError.ts` 派发 `forestfire-geo-service`；`HomeView` 顶栏提示 + `regionEnrichment` 逆地理失败时触发；地名搜索失败同样 `notifyGeoServiceError`。
-3) place-search：仍为 `geoPlaceSearch`。
-4) PATCH 火点坐标：`src/api/fireMarkers.ts` 的 `updateFireMarker` body 已支持可选 `longitude`、`latitude`（须成对）。
-5) 台账：`mergeLedgerWithPendingMarkers` 等与 `接口汇总.txt` 一致。
+1) missions：waypoints 高度字段为 `altitude_m`；可选 `speed_level`；返航复用同一接口。
+2) fleet telemetry：新增 `/api/fleet/telemetry`（仅经纬度上报）。

@@ -6,6 +6,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from sqlalchemy import inspect, text
 
 from config.config import config
@@ -13,13 +16,45 @@ from app.api.auth_routes import router as auth_router
 from app.api.fire_dashboard_routes import router as fire_dashboard_router
 from app.api.fire_ledger_routes import router as fire_ledger_router
 from app.api.fire_markers_routes import router as fire_markers_router
+from app.api.fleet_routes import router as fleet_router
 from app.api.geo_routes import router as geo_router
 from app.api.routes import router as analyze_router
+from app.api.uav_routes import router as uav_router, ws_router as uav_ws_router
 from app.core.errors import ApiError
 from app.database import Base, engine
 from app.models import FireMarker, FireMarkerEvent, User  # noqa: F401
 
 os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+
+
+# Logging: keep FastAPI/uvicorn default, add a dedicated ros logger for integration debugging.
+_ros_logger = logging.getLogger("forestfire.ros")
+_ros_logger.setLevel(logging.INFO)
+_ros_logger.propagate = False
+
+# Dedicated ROS log file (avoid duplicate handlers on reload/import)
+_ros_log_path = Path(config.ROS_LOG_FILE)
+_ros_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+_has_file_handler = any(
+    isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", "") == str(_ros_log_path.resolve())
+    for h in _ros_logger.handlers
+)
+if not _has_file_handler:
+    _fh = RotatingFileHandler(
+        filename=str(_ros_log_path),
+        maxBytes=5 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    _fh.setLevel(logging.INFO)
+    _fh.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s %(levelname)s %(name)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    _ros_logger.addHandler(_fh)
 
 
 def _ensure_mysql_schema() -> None:
@@ -136,6 +171,9 @@ app.include_router(fire_markers_router, prefix=config.API_V1_STR)
 app.include_router(geo_router, prefix=config.API_V1_STR)
 app.include_router(fire_dashboard_router, prefix=config.API_V1_STR)
 app.include_router(fire_ledger_router, prefix=config.API_V1_STR)
+app.include_router(uav_router, prefix=config.API_V1_STR)
+app.include_router(fleet_router, prefix=config.API_V1_STR)
+app.include_router(uav_ws_router)
 
 
 @app.get("/")

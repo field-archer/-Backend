@@ -48,6 +48,17 @@ class Config:
     JWT_ALGORITHM: str = str(_DATA.get("jwt_algorithm", "HS256"))
     JWT_EXPIRE_SECONDS: int = int(os.getenv("JWT_EXPIRE_SECONDS") or _DATA.get("jwt_expire_seconds", 7200))
 
+    # rosbridge：后端作为网关连接 ROS Bridge 的 WS 地址（建议仅内网可达）
+    ROSBRIDGE_URL: str = str(
+        os.getenv("ROSBRIDGE_URL")
+        or _DATA.get("rosbridge_url", "ws://127.0.0.1:9090")
+    )
+    # ros 日志文件：专门记录 ROS/rosbridge 相关消息（与其他日志分离）
+    ROS_LOG_FILE: str = str(
+        os.getenv("ROS_LOG_FILE")
+        or _DATA.get("ros_log_file", "logs/ros.log")
+    )
+
     # 高德 Web 服务（REST v3）：仅存服务端；仅用于服务端请求 restapi.amap.com（逆地理、检索等）
     AMAP_WEB_SERVICE_KEY: str = str(_DATA.get("amap_web_service_key", "") or "")
     # 高德 Web 端（JS API）Key：控制台平台类型为「Web端(JS API)」；供前端初始化地图（也可由本服务经鉴权接口下发）
